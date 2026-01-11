@@ -1,1 +1,15 @@
 @import "tailwindcss";
+
+@plugin "daisyui" {
+  themes:
+    light --default,
+    cupcake;
+}
+
+@layer sizing {
+  html,
+  body {
+    width: 100dvw;
+    height: 100dvh;
+  }
+}

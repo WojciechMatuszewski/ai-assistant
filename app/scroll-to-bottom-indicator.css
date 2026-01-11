@@ -1,0 +1,36 @@
+@keyframes grow-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.popover-anchor {
+  anchor-name: --dialog-anchor;
+  width: 0;
+  height: 0;
+}
+
+.popover {
+  position: absolute;
+  position-anchor: --dialog-anchor;
+  position-area: start center;
+
+  opacity: 0;
+
+  transition-property: opacity, display;
+  transition-duration: 0.2s;
+  transition-behavior: allow-discrete;
+
+  &:popover-open {
+    opacity: 1;
+  }
+
+  @starting-style {
+    &:popover-open {
+      opacity: 0;
+    }
+  }
+}
