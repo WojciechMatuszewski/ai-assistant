@@ -1,32 +1,93 @@
 "use client";
 
 import type { MyUIMessage } from "@/src/types";
-import type { TextUIPart } from "ai";
+import { DefaultChatTransport, type TextUIPart } from "ai";
 import clsx from "clsx";
 import {
   Fragment,
   useActionState,
   useEffect,
+  useMemo,
   useRef,
   type ComponentRef,
   type Ref
 } from "react";
 import z from "zod";
 
-type Chat = {
-  id: string;
-  title: string;
-};
+export function Chat({ chat }: { chat: DBChat | null }) {
+  const currentChatId = useMemo(() => {
+    return chat?.id ?? crypto.randomUUID();
+  }, [chat?.id]);
+
+  const isNewChat = currentChatId !== chat?.id;
+
+  const router = useRouter();
+
+  const { messages, sendMessage } = useChat<MyUIMessage>({
+    id: currentChatId,
+    messages: chat?.messages ?? [],
+    generateId: () => {
+      return crypto.randomUUID();
+    },
+    onData: (message) => {
+      if (message.type === "data-frontend-chat") {
+        const chatData = message.data;
+        if (isNewChat) {
+          router.replace(`/?chatId=${chatData.id}`);
+        } else {
+          router.refresh();
+        }
+      }
+    },
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+      prepareSendMessagesRequest: (request) => {
+        return {
+          body: {
+            id: request.body?.id,
+            message: request.messages?.at(-1)
+          }
+        };
+      }
+    })
+  });
+
+  const { state, scrollRef, contentRef, scrollToBottom } = useStickToBottom({});
+  const scrollToBottomButtonVisible = state.isAtBottom === false;
+
+  return (
+    <div className="flex-1 flex flex-col p-4 overflow-hidden">
+      <div className="flex-1 overflow-y-auto" id="scroller" ref={scrollRef}>
+        <MessagesList ref={contentRef} messages={messages} />
+      </div>
+
+      <ScrollToBottomIndicator.Anchor className="mb-2" />
+
+      <Form
+        onSubmit={(value) => {
+          console.log("sending message");
+          sendMessage({ text: value }, { body: { id: currentChatId } });
+          scrollToBottom();
+        }}
+      />
+
+      <ScrollToBottomIndicator
+        visible={scrollToBottomButtonVisible}
+        onScrollToBottom={() => {
+          scrollToBottom();
+        }}
+      />
+    </div>
+  );
+}
 
 export function Sidebar({
   chats,
   selectedChatId,
-  onSelectChat,
   sidebarToggleId
 }: {
-  chats: Array<Chat>;
-  selectedChatId: string;
-  onSelectChat: (id: string) => void;
+  chats: Array<{ id: string; title: string }>;
+  selectedChatId: string | undefined;
   sidebarToggleId: string;
 }) {
   return (
@@ -53,24 +114,41 @@ export function Sidebar({
           <span className="font-semibold text-lg">Chats</span>
         </div>
 
+        <Link href="/" className="btn btn-primary btn-block mb-4">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="size-5"
+          >
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          New Chat
+        </Link>
+
         <ul className="flex flex-col gap-1">
-          {chats.map((chat) => (
-            <li key={chat.id}>
-              <a
-                href={`/chat/${chat.id}`}
-                onClick={(e) => {
-                  e.preventDefault();
-                  onSelectChat(chat.id);
-                }}
-                className={clsx(
-                  "w-full text-left truncate",
-                  selectedChatId === chat.id && "active"
-                )}
-              >
-                {chat.title}
-              </a>
-            </li>
-          ))}
+          {chats.map((chat) => {
+            const isSelected = selectedChatId === chat.id;
+            return (
+              <li key={chat.id}>
+                <Link
+                  href={`/?chatId=${chat.id}`}
+                  className={clsx(
+                    "w-full text-left truncate rounded-lg px-3 py-2 transition-colors",
+                    isSelected
+                      ? "bg-primary text-primary-content"
+                      : "hover:bg-base-300"
+                  )}
+                >
+                  {chat.title}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </aside>
     </div>
@@ -168,6 +246,30 @@ const Renderers: Partial<UIMessagePartsRenderers> = {
   text: TextPartRenderer
 };
 
+function MessagesListEmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-base-content/60">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="size-16 mb-4"
+      >
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        <path d="M8 10h.01" />
+        <path d="M12 10h.01" />
+        <path d="M16 10h.01" />
+      </svg>
+      <p className="text-lg font-medium">No messages yet</p>
+      <p className="text-sm">Start a conversation below</p>
+    </div>
+  );
+}
+
 export function MessagesList({
   messages,
   ref
@@ -176,7 +278,7 @@ export function MessagesList({
   ref?: Ref<HTMLUListElement>;
 }) {
   if (!messages.length) {
-    return null;
+    return <MessagesListEmptyState />;
   }
 
   return (
@@ -227,6 +329,11 @@ export function MessagesList({
 }
 
 import "./scroll-to-bottom-indicator.css";
+import { useChat } from "@ai-sdk/react";
+import { useStickToBottom } from "use-stick-to-bottom";
+import Link from "next/link";
+import type { DBChat } from "@/app/persistance";
+import { useRouter } from "next/navigation";
 
 export function ScrollToBottomIndicator({
   visible,
