@@ -15,6 +15,22 @@ const DBSchatSchema = z.object({
   updatedAt: z.iso.datetime()
 });
 
+const DBEmailSchema = z.object({
+  id: z.string(),
+  threadId: z.string(),
+  from: z.string().email(),
+  to: z.string().email(),
+  subject: z.string(),
+  body: z.string(),
+  timestamp: z.iso.datetime(),
+  arcId: z.string(),
+  phaseId: z.number(),
+  inReplyTo: z.string().optional(),
+  references: z.array(z.string()).optional()
+});
+
+export type DBEmail = z.infer<typeof DBEmailSchema>;
+
 export type DBChat = z.infer<typeof DBSchatSchema>;
 
 const DBSchatsSchema = z.array(DBSchatSchema);

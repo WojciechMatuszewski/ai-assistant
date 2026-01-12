@@ -7,7 +7,6 @@ import {
   Fragment,
   useActionState,
   useEffect,
-  useMemo,
   useRef,
   type ComponentRef,
   type Ref
@@ -15,11 +14,8 @@ import {
 import z from "zod";
 
 export function Chat({ chat }: { chat: DBChat | null }) {
-  const currentChatId = useMemo(() => {
-    return chat?.id ?? crypto.randomUUID();
-  }, [chat?.id]);
-
-  const isNewChat = currentChatId !== chat?.id;
+  const currentChatId = chat?.id;
+  const isNewChat = currentChatId == null;
 
   const router = useRouter();
 
@@ -328,12 +324,12 @@ export function MessagesList({
   );
 }
 
-import "./scroll-to-bottom-indicator.css";
-import { useChat } from "@ai-sdk/react";
-import { useStickToBottom } from "use-stick-to-bottom";
-import Link from "next/link";
 import type { DBChat } from "@/app/persistance";
+import { useChat } from "@ai-sdk/react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useStickToBottom } from "use-stick-to-bottom";
+import "./scroll-to-bottom-indicator.css";
 
 export function ScrollToBottomIndicator({
   visible,

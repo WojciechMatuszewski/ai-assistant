@@ -2,8 +2,7 @@ import {
   appendChatMessages,
   getChatById,
   saveChat,
-  updateChat,
-  type DBChat
+  updateChat
 } from "@/app/persistance";
 import { createAgent, generateTitleForChat } from "@/src/llm";
 import type { MyUIMessage } from "@/src/types";
@@ -17,22 +16,20 @@ import {
 export const POST = async (request: Request) => {
   const body: { message?: MyUIMessage; id?: string } = await request.json();
 
-  let currentChat = await getChatById({ id: body.id });
-  const currentChatMessages = currentChat?.messages ?? [];
+  const { chat: currentChat, isNewChat } = await getChat({ id: body.id });
+  const currentChatMessages = currentChat.messages;
 
-  const maybeChatMessage = [...currentChatMessages, body.message];
   const validateUIMessagesResult = await safeValidateUIMessages<MyUIMessage>({
-    messages: maybeChatMessage
+    messages: [...currentChatMessages, body.message]
   });
-
   if (!validateUIMessagesResult.success) {
     return Response.json({
       error: `Invalid messages: ${validateUIMessagesResult.error}`
     });
   }
 
-  const chatMessages = validateUIMessagesResult.data;
-  const modelMessages = await convertToModelMessages(chatMessages);
+  const validatedChatMessages = validateUIMessagesResult.data;
+  currentChat.messages = validatedChatMessages;
 
   const stream = createUIMessageStream<MyUIMessage>({
     async execute({ writer }) {
@@ -40,15 +37,7 @@ export const POST = async (request: Request) => {
 
       let generateChatTitlePromise: Promise<void> = Promise.resolve();
 
-      if (!currentChat) {
-        currentChat = {
-          id: body.id ?? crypto.randomUUID(),
-          title: "Generating...",
-          messages: chatMessages,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-
+      if (isNewChat) {
         await saveChat({ chat: currentChat });
 
         writer.write({
@@ -58,10 +47,10 @@ export const POST = async (request: Request) => {
         });
 
         generateChatTitlePromise = generateTitleForChat({
-          messages: chatMessages
+          messages: validatedChatMessages
         })
           .then((title) => {
-            return updateChat({ id: currentChat!.id, updates: { title } });
+            return updateChat({ id: currentChat.id, updates: { title } });
           })
           .then((updatedChat) => {
             writer.write({
@@ -73,7 +62,7 @@ export const POST = async (request: Request) => {
       }
 
       const agentStream = await agent.stream({
-        messages: modelMessages
+        messages: await convertToModelMessages(validatedChatMessages)
       });
 
       writer.merge(
@@ -99,3 +88,22 @@ export const POST = async (request: Request) => {
 };
 
 export const maxDuration = 30;
+
+async function getChat({ id }: { id: string | undefined }) {
+  const retrieved = await getChatById({ id });
+  if (retrieved) {
+    return { isNewChat: false, chat: retrieved };
+  }
+
+  return {
+    isNewChat: true,
+    chat: {
+      isNewChat: true,
+      id: crypto.randomUUID(),
+      title: "Generating...",
+      messages: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  };
+}

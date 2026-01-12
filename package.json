@@ -12,9 +12,11 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "3.0.9",
+    "@ai-sdk/openai": "3.0.7",
     "@ai-sdk/react": "3.0.28",
     "ai": "6.0.26",
     "clsx": "2.1.1",
+    "es-toolkit": "1.43.0",
     "next": "16.1.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
