@@ -5,6 +5,7 @@ import {
   updateChat
 } from "@/app/persistance";
 import { createAgent, generateTitleForChat } from "@/src/llm";
+import { logger } from "@/src/logger";
 import type { MyUIMessage } from "@/src/types";
 import {
   convertToModelMessages,
@@ -76,7 +77,7 @@ export const POST = async (request: Request) => {
     },
     onFinish: async ({ responseMessage }) => {
       await appendChatMessages({
-        id: currentChat!.id,
+        id: currentChat.id,
         messages: [responseMessage]
       });
     }

@@ -1,3 +1,4 @@
+import { logger } from "@/src/logger";
 import type { MyUIMessage } from "@/src/types";
 import { safeValidateUIMessages } from "ai";
 import { mkdir, readFile, writeFile } from "fs/promises";
@@ -18,13 +19,13 @@ const DBSchatSchema = z.object({
 const DBEmailSchema = z.object({
   id: z.string(),
   threadId: z.string(),
-  from: z.string().email(),
-  to: z.string().email(),
+  from: z.string(),
+  to: z.string(),
   subject: z.string(),
   body: z.string(),
   timestamp: z.iso.datetime(),
-  arcId: z.string(),
-  phaseId: z.number(),
+  arcId: z.string().optional(),
+  phaseId: z.number().optional(),
   inReplyTo: z.string().optional(),
   references: z.array(z.string()).optional()
 });
@@ -37,6 +38,9 @@ const DBSchatsSchema = z.array(DBSchatSchema);
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const CHATS_PATH = path.join(DATA_DIR, "chats.json");
+const EMAILS_PATH = path.join(DATA_DIR, "emails.json");
+
+const DBEmailsSchema = z.array(DBEmailSchema);
 
 let dataDirCreated = false;
 
@@ -57,6 +61,16 @@ async function readChats(): Promise<Array<DBChat>> {
   return DBSchatsSchema.parseAsync(parsed);
 }
 
+async function readEmails(): Promise<Array<DBEmail>> {
+  const content = await readFile(EMAILS_PATH, "utf-8").catch(() => null);
+  if (!content) {
+    return [];
+  }
+
+  const parsed = JSON.parse(content);
+  return DBEmailsSchema.parseAsync(parsed);
+}
+
 async function writeChats(chats: Array<DBChat>): Promise<void> {
   await ensureDataDir();
   await writeFile(CHATS_PATH, JSON.stringify(chats, null, 2), "utf-8");
@@ -64,6 +78,12 @@ async function writeChats(chats: Array<DBChat>): Promise<void> {
 
 export async function getAllChats(): Promise<Array<DBChat>> {
   return readChats();
+}
+
+export async function getAllEmails(): Promise<Array<DBEmail>> {
+  logger.info("Loading all emails");
+
+  return readEmails();
 }
 
 export async function getChatById({

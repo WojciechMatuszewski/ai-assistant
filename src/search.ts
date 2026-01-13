@@ -1,6 +1,7 @@
 "server-only";
 
 import { getEnv } from "@/src/env";
+import { logger } from "@/src/logger";
 import { createOpenAI } from "@ai-sdk/openai";
 import { cosineSimilarity, embed, embedMany } from "ai";
 import { chunk } from "es-toolkit";
@@ -12,7 +13,19 @@ const embeddingsLLMProvider = createOpenAI({
   apiKey: getEnv().OPENAI_API_KEY
 });
 
-export async function searchWithEmbeddings<T extends { id: string }>({
+type SearchItem = { id: string };
+
+type ItemWithEmbedding<T extends SearchItem> = {
+  item: T;
+  embedding: Array<number>;
+};
+
+type ItemWithScore<T extends SearchItem> = {
+  item: T;
+  score: number;
+};
+
+export async function searchWithEmbeddings<T extends SearchItem>({
   query,
   items,
   toText
@@ -20,16 +33,31 @@ export async function searchWithEmbeddings<T extends { id: string }>({
   query: string;
   items: Array<T>;
   toText: (item: T) => string;
-}) {
-  /**
-   * TODO: Add `item` on the embedding item
-   */
-  const embeddings = await loadOrGenerateEmbeddings({ items, toText });
+}): Promise<Array<ItemWithScore<T>>> {
+  logger.info(
+    { query, numberOfItems: items.length },
+    "Searching items with embeddings"
+  );
+
+  const itemsWithEmbeddings = await loadOrGenerateEmbeddings({ items, toText });
 
   const { embedding: queryEmbedding } = await embed({
     model: embeddingsLLMProvider.embeddingModel("text-embedding-3-small"),
     value: query
   });
+
+  const itemsWithScores = itemsWithEmbeddings
+    .map(({ item, embedding }) => {
+      return {
+        item,
+        score: cosineSimilarity(queryEmbedding, embedding)
+      };
+    })
+    .toSorted((a, b) => {
+      return b.score - a.score;
+    });
+
+  return itemsWithScores;
 }
 
 const EMBEDDINGS_DIR = path.join(process.cwd(), "data", "embeddings");
@@ -45,7 +73,7 @@ async function ensureEmbeddingsDir() {
   embeddingsDirCreated = true;
 }
 
-async function loadOrGenerateEmbeddings<T extends { id: string }>({
+async function loadOrGenerateEmbeddings<T extends SearchItem>({
   items,
   toText
 }: {
@@ -54,28 +82,35 @@ async function loadOrGenerateEmbeddings<T extends { id: string }>({
 }) {
   await ensureEmbeddingsDir();
 
-  const cachedEmbeddings: Array<{ id: string; embedding: Array<number> }> = [];
+  const cachedEmbeddings: Array<ItemWithEmbedding<T>> = [];
   const uncachedItems: Array<T> = [];
 
   for (const item of items) {
     const text = toText(item);
     const cachedEmbedding = await getCachedEmbedding({ text });
     if (cachedEmbedding) {
-      cachedEmbeddings.push({ id: item.id, embedding: cachedEmbedding });
+      cachedEmbeddings.push({ item, embedding: cachedEmbedding });
     } else {
       uncachedItems.push(item);
     }
   }
 
+  logger.info(
+    `Found ${uncachedItems.length} uncached items to generate embeddings for`
+  );
+
   if (uncachedItems.length === 0) {
+    logger.info("All embedding cached. Returning");
+
     return cachedEmbeddings;
   }
 
-  const embeddings: Array<{ id: string; embedding: Array<number> }> = [
-    ...cachedEmbeddings
-  ];
+  const embeddings: Array<ItemWithEmbedding<T>> = [...cachedEmbeddings];
 
   const chunks = chunk(uncachedItems, 99);
+
+  logger.info({ chunks: chunks.length }, "Processing embeddings chunks");
+
   for (const chunk of chunks) {
     const { embeddings: createdEmbeddings } = await embedMany({
       maxParallelCalls: 10,
@@ -91,7 +126,7 @@ async function loadOrGenerateEmbeddings<T extends { id: string }>({
 
         embeddings.push({
           embedding: createdEmbedding,
-          id: chunkPiece.id
+          item: chunkPiece
         });
 
         return writeEmbeddingToCache({
@@ -131,7 +166,7 @@ async function writeEmbeddingToCache({
   await writeFile(filePath, JSON.stringify(embedding));
 }
 
-async function hashText({ text }: { text: string }) {
+function hashText({ text }: { text: string }) {
   const hashed = crypto
     .createHash("sha256")
     .update(text)
