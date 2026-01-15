@@ -9,14 +9,13 @@
 
 .popover-anchor {
   anchor-name: --dialog-anchor;
-  width: 0;
-  height: 0;
 }
 
 .popover {
   position: absolute;
   position-anchor: --dialog-anchor;
   position-area: start center;
+  background: transparent;
 
   opacity: 0;
 

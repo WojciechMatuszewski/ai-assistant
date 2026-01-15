@@ -4,7 +4,11 @@ import {
   saveChat,
   updateChat
 } from "@/app/persistance";
-import { createAgent, generateTitleForChat } from "@/src/llm";
+import {
+  createEmailAssistantAgent,
+  generateTitleForChat,
+  getTools
+} from "@/src/llm";
 import { logger } from "@/src/logger";
 import type { MyUIMessage } from "@/src/types";
 import {
@@ -34,7 +38,7 @@ export const POST = async (request: Request) => {
 
   const stream = createUIMessageStream<MyUIMessage>({
     async execute({ writer }) {
-      const agent = createAgent();
+      const agent = createEmailAssistantAgent({ tools: getTools() });
 
       let generateChatTitlePromise: Promise<void> = Promise.resolve();
 
@@ -69,7 +73,11 @@ export const POST = async (request: Request) => {
       writer.merge(
         agentStream.toUIMessageStream({
           sendSources: true,
-          sendReasoning: true
+          sendReasoning: true,
+          onError(error) {
+            logger.error({ error });
+            return "An error occurred.";
+          }
         })
       );
 

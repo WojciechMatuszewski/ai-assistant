@@ -1,0 +1,1 @@
+- Use latest daisyUI for styling. See https://daisyui.com/components/

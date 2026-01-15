@@ -18,9 +18,11 @@
     "clsx": "2.1.1",
     "es-toolkit": "1.43.0",
     "next": "16.1.1",
+    "okapibm25": "1.4.1",
     "pino": "10.1.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-markdown": "10.1.0",
     "server-only": "0.0.1",
     "use-stick-to-bottom": "1.1.1",
     "zod": "4.3.5"

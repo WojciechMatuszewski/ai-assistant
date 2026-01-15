@@ -8,6 +8,7 @@ import { chunk } from "es-toolkit";
 import crypto from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import BM25 from "okapibm25";
 
 const embeddingsLLMProvider = createOpenAI({
   apiKey: getEnv().OPENAI_API_KEY
@@ -59,6 +60,38 @@ export async function searchWithEmbeddings<T extends SearchItem>({
 
   return itemsWithScores;
 }
+
+export function searchWithBM25<T extends SearchItem>({
+  keywords,
+  items,
+  toText
+}: {
+  keywords: Array<string>;
+  items: Array<T>;
+  toText: (item: T) => string;
+}): Array<ItemWithScore<T>> {
+  const documents = items.map(toText);
+  const scores = BM25(documents, keywords) as Array<number>;
+
+  const itemsWithScores = scores
+    .map((score, index) => {
+      return {
+        item: items.at(index)!,
+        score
+      };
+    })
+    .toSorted((first, second) => {
+      return second.score - first.score;
+    });
+
+  return itemsWithScores;
+}
+
+export function rrf<T extends SearchItem, K extends ItemWithScore<T>>({
+  itemsWithScores
+}: {
+  itemsWithScores: Array<Array<K>>;
+}) {}
 
 const EMBEDDINGS_DIR = path.join(process.cwd(), "data", "embeddings");
 
